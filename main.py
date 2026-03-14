@@ -7,7 +7,7 @@ import time
 from streamlit_lottie import st_lottie
 import pandas as pd
 
-st.set_page_config(page_title="💬 Chatbot", layout="centered")
+st.set_page_config(page_title="💬 ollama-agent", layout="centered")
 
 # Splash animation
 def load_lottiefile(filepath):
@@ -27,7 +27,7 @@ if st.session_state.show_intro:
     splash.empty()
     st.session_state.show_intro = False
 
-st.title("💬 Ollama Chat")
+st.title("💬 Ollama multimodel agent")
 st.caption("🚀 Powered by Ollama — multiple chat sessions with persistence")
 
 # File to store chats locally
