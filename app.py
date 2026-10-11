@@ -7,6 +7,7 @@ LOGO_HTML = f'<img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSU
 
 st.set_page_config(
     page_title="DataVyn Labs · AI Agent",
+    page_icon="🔷",
     layout="centered",
     initial_sidebar_state="expanded",
 )
@@ -309,6 +310,7 @@ CLOUD_MODELS = {
     "DeepSeek V3.2":            "deepseek-v3.2",
     "DeepSeek V3.1 671B":       "deepseek-v3.1:671b",
     # ── Qwen ──
+    "qwen3.5-Coder 397B":       "qwen3.5:397b-cloud",
     "Qwen3-Coder 480B":         "qwen3-coder:480b",
     "Qwen3-Coder-Next":         "qwen3-coder-next",
     "Qwen3-Next 80B":           "qwen3-next:80b",
@@ -316,8 +318,10 @@ CLOUD_MODELS = {
     "Kimi K2.5":                "kimi-k2.5",
     "Kimi K2 Thinking":         "kimi-k2-thinking",
     # ── Google ──
+    "Gemma4 ":         "gemma4:31b-cloud",
     "Gemini 3 Flash Preview":   "gemini-3-flash-preview",
     # ── MiniMax ──
+    "MiniMax M2.7":             "minimax-m2.7:cloud",
     "MiniMax M2.5":             "minimax-m2.5",
     "MiniMax M2.1":             "minimax-m2.1",
     "MiniMax M2":               "minimax-m2",
@@ -334,7 +338,7 @@ CLOUD_MODELS = {
 
 # Fixed: concise, on-point responses — balanced temperature, 600 token cap
 TEMPERATURE = 0.6
-MAX_TOKENS  = 1200
+MAX_TOKENS  = 2000
 SYS_INSTR   = (
     "You are a helpful AI assistant. "
     "Always write complete, finished responses — never leave a sentence or thought unfinished. "
@@ -461,7 +465,6 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
         st.stop()
-
     st.divider()
 
     st.markdown("""
@@ -517,7 +520,7 @@ prompt = st.chat_input(
     "Say something, record audio (speech-to-text), or attach a file",
     accept_audio=True,
     accept_file=True,
-    file_type=["txt", "pdf", "json", "py", "csv"],
+    file_type=["txt", "pdf", "json", "py", "csv", "jpg", "png", "md", "img"],
 )
 
 if prompt:
@@ -527,14 +530,24 @@ if prompt:
     if prompt.text:
         user_text = prompt.text
 
+    image_b64_list = []   # base64 strings for images in this turn
     if prompt.files:
+        import base64
+        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".img"}
         for f in prompt.files:
-            try:
-                raw = f.read()
-                file_str = raw.decode("utf-8", errors="replace")
-                file_context += f"\n\n[Attached file: {f.name}]\n```\n{file_str[:4000]}\n```"
-            except Exception as e:
-                file_context += f"\n\n[Could not read {f.name}: {e}]"
+            ext = "." + f.name.rsplit(".", 1)[-1].lower() if "." in f.name else ""
+            raw = f.read()
+            if ext in IMAGE_EXTS:
+                # Send as base64 for vision models
+                b64 = base64.b64encode(raw).decode("utf-8")
+                image_b64_list.append(b64)
+                file_context += f"\n\n[Attached image: {f.name}]"
+            else:
+                try:
+                    file_str = raw.decode("utf-8", errors="replace")
+                    file_context += f"\n\n[Attached file: {f.name}]\n```\n{file_str[:4000]}\n```"
+                except Exception as e:
+                    file_context += f"\n\n[Could not read {f.name}: {e}]"
 
     if not user_text and not file_context:
         st.stop()
@@ -542,16 +555,25 @@ if prompt:
     display_text      = user_text if user_text else "(file attached)"
     full_user_content = user_text + file_context
 
-    st.session_state.chats[st.session_state.current_chat].append(
-        {"role": "user", "content": full_user_content}
-    )
+    # Build the user message — with images if present
+    if image_b64_list:
+        user_msg_content = {
+            "role": "user",
+            "content": full_user_content,
+            "images": image_b64_list,
+        }
+    else:
+        user_msg_content = {"role": "user", "content": full_user_content}
+
+    st.session_state.chats[st.session_state.current_chat].append(user_msg_content)
+
     with st.chat_message("user"):
         st.markdown(display_text)
         if file_context:
             st.caption(f"📎 {', '.join(f.name for f in prompt.files)}")
 
     api_msgs = [{"role": "system", "content": SYS_INSTR}] + [
-        {"role": m["role"], "content": m["content"]}
+        {k: v for k, v in m.items()}          # include images key if present
         for m in st.session_state.chats[st.session_state.current_chat]
     ]
 
@@ -566,3 +588,4 @@ if prompt:
     st.session_state.chats[st.session_state.current_chat].append(
         {"role": "assistant", "content": full_reply}
     )
+    
